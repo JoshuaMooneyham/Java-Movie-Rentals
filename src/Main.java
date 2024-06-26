@@ -1,11 +1,5 @@
-import javax.crypto.SecretKeyFactory;
-import javax.swing.*;
-import java.security.SecureRandom;
-import java.security.spec.KeySpec;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Locale;
 import java.util.Scanner;
 
 public class Main {
@@ -16,7 +10,6 @@ public class Main {
     public static void main(String[] args) {
         Repository db = new Repository();
         Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-//        db.pullMovies(dbconn);
         Main main = new Main();
         Scanner sc = new Scanner(System.in);
         String userInput;
@@ -53,6 +46,7 @@ public class Main {
                 userInput = sc.nextLine().toLowerCase().strip();
                 switch (userInput) {
                     case "movies":
+                        main.manageMovies(sc);
                         break;
                     case "users":
                         break;
@@ -133,6 +127,7 @@ public class Main {
             userInput = scanner.nextLine().toLowerCase().strip();
             switch (userInput) {
                 case "add":
+                    this.addMovie(scanner);
                     break;
                 case "delete":
                     break;
@@ -144,6 +139,68 @@ public class Main {
                     System.out.println("Please enter a valid input.");
             }
         }
+    }
+
+    public void addMovie(Scanner scanner) {
+        String title = "";
+        System.out.print("Title (or [Back] to cancel): ");
+        while (title.length() < 2) {
+            title = this.toTitleCase(scanner.nextLine().strip());
+            if (title.equals("Back")) {
+                return;
+            } else if (title.length() < 2) {
+                System.out.print("Please enter a valid title or [Back]: ");
+            }
+        }
+        System.out.print("Directed by (name or leave blank): ");
+        String director = scanner.nextLine().strip();
+        System.out.print("Year (YYYY or leave blank): ");
+        String year = scanner.nextLine().strip();
+        System.out.print("Runtime (in minutes or leave blank): ");
+        String runtime = scanner.nextLine().strip();
+        System.out.print("Genre (separated by ',' or leave blank): ");
+        String genre = scanner.nextLine().strip();
+
+        Director foundDirector = null;
+        if (!director.equals("")) {
+            Repository db = new Repository();
+            Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
+            foundDirector = db.getDirector(dbconn, this.toTitleCase(director));
+            if (foundDirector == null) {
+                foundDirector = db.createDirector(dbconn, this.toTitleCase(director), null);
+            }
+        }
+        Integer intyear = null;
+        if (!year.equals("")) {
+            try {
+                intyear = Integer.valueOf(year);
+            } catch (NumberFormatException e) {
+                System.out.println("An error has occurred while parsing 'year', storing as NULL.");
+            }
+        }
+        Integer intruntime = null;
+        if (!runtime.equals("")) {
+            try {
+                intruntime = Integer.valueOf(runtime);
+            } catch (NumberFormatException e) {
+                System.out.println("An error has occurred while parsing 'runtime', storing as NULL.");
+            }
+        }
+        String [] genres = {};
+        if (!genre.equals("")) {
+            genres = genre.split(",");
+            for (int i = 0; i < genres.length; i++) {
+                genres[i] = this.toTitleCase(genres[i]).strip();
+            }
+        }
+
+        for (String g : genres) {
+            System.out.println(g);
+        }
+
+        Repository db = new Repository();
+        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
+        db.createMovie(dbconn, foundDirector, title, intyear, intruntime, genres);
     }
 
     public void viewMovies(Scanner scanner) {
@@ -171,7 +228,7 @@ public class Main {
                     case "all":
                         Repository repo = new Repository();
                         Connection conn = repo.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-                        repo.pullMovies(conn);
+                        repo.filterMovies(conn, "id");
                         break;
                     case "available":
                         Repository repo2 = new Repository();
@@ -184,5 +241,42 @@ public class Main {
             }
 
         }
+    }
+
+    public void updateMovie(Scanner scanner) {
+
+    }
+
+    public String toTitleCase(String title) {
+        boolean space = true;
+        for (int i = 0; i < title.length(); i++) {
+            if (space) {
+                if (i == 0 && title.length() > 1) {
+                    title = String.format("%s", title.charAt(0)).toUpperCase() + title.substring(1);
+                } else if (i == 0 && title.length() == 1) {
+                    title = title.toUpperCase();
+                } else {
+                    title = title.substring(0, i) + String.format("%s", title.charAt(i)).toUpperCase() + title.substring(i + 1);
+                }
+
+            } else {
+                if (title.length() > 2) {
+                    title = title.substring(0, i) + String.format("%s", title.charAt(i)).toLowerCase() + title.substring(i + 1);
+                } else {
+                    title = title.substring(0, i) + String.format("%s", title.charAt(i)).toLowerCase();
+                }
+            }
+
+            if (title.charAt(i) == ' '){
+                if (space) {
+                    title = title.substring(0, i) + title.substring(i+1);
+                    i--;
+                }
+                space = true;
+            } else {
+                space = false;
+            }
+        }
+        return title;
     }
 }

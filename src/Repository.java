@@ -3,7 +3,6 @@
 //import java.sql.PreparedStatement;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.Scanner;
 
 public class Repository {
     public Connection connectToDatabase(String dbname, String user, String pass) {
@@ -46,17 +45,28 @@ public class Repository {
 //        }
 //    }
 
-    public void pullMovies(Connection conn) {
+    public ArrayList<Movie> pullMovies(Connection conn) {
         PreparedStatement statement;
         try {
-            String sql = "SELECT * FROM movies ORDER BY id;";
+            String sql = """
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    ORDER BY title;""";
             statement = conn.prepareStatement(sql);
             ResultSet test = statement.executeQuery();
+            ArrayList<Movie> movieList = new ArrayList<>();
             while (test.next()) {
-                System.out.println(String.format("%s %s %s %s %s %s %s", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by")));
+                String [] genre = test.getArray("genre").toString().split(",");
+                for (int i = 0; i < genre.length; i++) {
+                    genre[i] = genre[i].replaceAll("[{}]", "");
+                }
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
+            return movieList;
         } catch (Exception e) {
             System.out.println(e);
+            return null;
         }
     }
 
@@ -102,7 +112,7 @@ public class Repository {
         }
     }
 
-    public void createDirector(Connection conn, String name, int age) {
+    public Director createDirector(Connection conn, String name, Integer age) {
         PreparedStatement statement;
         try {
             String sql = """
@@ -111,11 +121,22 @@ public class Repository {
                     """;
             statement = conn.prepareStatement(sql);
             statement.setString(1, name);
-            statement.setInt(2, age);
-            ResultSet test = statement.executeQuery();
+
+            if (age != null) {
+                System.out.println(age);
+                System.out.println("fuck");
+                statement.setInt(2, age);
+            } else {
+                statement.setNull(2, Types.INTEGER);
+            }
+
+            statement.execute();
+            statement.close();
             System.out.println("Created New Director Entry: " + name);
+            return this.getDirector(conn, name);
         } catch (Exception e) {
             System.out.println(e);
+            return null;
         }
     }
 
@@ -136,21 +157,44 @@ public class Repository {
         }
     }
 
-    public void createMovie(Connection conn, String director, String title, int year, int runtime, String[] genre) {
+    public void createMovie(Connection conn, Director director, String title, Integer year, Integer runtime, String[] genre) {
         PreparedStatement statement;
         try {
-            Director foundDirector = this.getDirector(conn, director);
             String sql = """
                     INSERT INTO movies (director_id, title, year, runtime, genre)
                         VALUES (?, ?, ?, ?, ?)""";
             statement = conn.prepareStatement(sql);
-            statement.setInt(1, foundDirector.id);
+
+            if (director != null) {
+                statement.setInt(1, director.id);
+            } else {
+                statement.setNull(1, Types.INTEGER);
+            }
+
             statement.setString(2, title);
-            statement.setInt(3, year);
-            statement.setInt(4, runtime);
-            statement.setArray(5, conn.createArrayOf("VARCHAR", genre));
-            ResultSet test = statement.executeQuery();
-            System.out.println(test);
+
+            if (year != null) {
+                statement.setInt(3, year);
+            } else {
+                statement.setNull(3, Types.INTEGER);
+            }
+
+            if (runtime != null) {
+                statement.setInt(4, runtime);
+            } else {
+                statement.setNull(4, Types.INTEGER);
+            }
+
+            if (genre.length != 0) {
+                statement.setArray(5, conn.createArrayOf("VARCHAR", genre));
+            } else {
+                statement.setNull(5, Types.ARRAY);
+            }
+
+            statement.execute();
+            statement.close();
+
+            System.out.println(String.format("Created Movie %s", title));
 
         } catch (Exception e) {
             System.out.println(e);
