@@ -1,5 +1,6 @@
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Scanner;
 
 public class Main {
@@ -129,9 +130,14 @@ public class Main {
                 case "add":
                     this.addMovie(scanner);
                     break;
+                case "view":
+                    this.viewMovies(scanner);
+                    break;
                 case "delete":
+                    this.deleteMovies(scanner);
                     break;
                 case "update":
+                    this.updateMovie(scanner);
                     break;
                 case "back":
                     return;
@@ -152,8 +158,16 @@ public class Main {
                 System.out.print("Please enter a valid title or [Back]: ");
             }
         }
-        System.out.print("Directed by (name or leave blank): ");
-        String director = scanner.nextLine().strip();
+        String director = "";
+        System.out.print("Directed by (Name or [Back] to cancel): ");
+        while (director.length() < 2) {
+            director = this.toTitleCase(scanner.nextLine().strip());
+            if (director.equals("Back")) {
+                return;
+            } else if (director.length() < 2) {
+                System.out.print("Please enter a valid Director Name or [Back]: ");
+            }
+        }
         System.out.print("Year (YYYY or leave blank): ");
         String year = scanner.nextLine().strip();
         System.out.print("Runtime (in minutes or leave blank): ");
@@ -161,15 +175,14 @@ public class Main {
         System.out.print("Genre (separated by ',' or leave blank): ");
         String genre = scanner.nextLine().strip();
 
-        Director foundDirector = null;
-        if (!director.equals("")) {
-            Repository db = new Repository();
-            Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-            foundDirector = db.getDirector(dbconn, this.toTitleCase(director));
-            if (foundDirector == null) {
-                foundDirector = db.createDirector(dbconn, this.toTitleCase(director), null);
-            }
+        Repository db = new Repository();
+        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
+
+        Director foundDirector = db.getDirector(dbconn, director);
+        if (foundDirector == null) {
+            foundDirector = db.createDirector(dbconn, director, null);
         }
+
         Integer intyear = null;
         if (!year.equals("")) {
             try {
@@ -193,14 +206,9 @@ public class Main {
                 genres[i] = this.toTitleCase(genres[i]).strip();
             }
         }
-
-        for (String g : genres) {
-            System.out.println(g);
+        if (!title.equals("") && title.length() >= 2 && foundDirector != null) {
+            db.createMovie(dbconn, foundDirector, title, intyear, intruntime, genres);
         }
-
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        db.createMovie(dbconn, foundDirector, title, intyear, intruntime, genres);
     }
 
     public void viewMovies(Scanner scanner) {
@@ -244,7 +252,151 @@ public class Main {
     }
 
     public void updateMovie(Scanner scanner) {
+        String userInput = "";
+        Repository db = new Repository();
+        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
+        ArrayList<Movie> movieList = db.pullMovies(dbconn);
+        Movie currentMovie = null;
+        int page = 0;
+        while (userInput != "Back") {
+            for (int i = page * 5; i < Math.min(page * 5 + 5, movieList.size()); i++) {
+                System.out.printf("%s: %s by %s\n", i + 1, movieList.get(i).title, movieList.get(i).director != null ? movieList.get(i).director.name : "Unknown Director");
+            }
+            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) : Math.round(movieList.size() / 5) + 1);
+            System.out.print("Enter the number/name of the movie you want to edit, or [Back] to cancel.\n> ");
+            userInput = this.toTitleCase(scanner.nextLine().strip());
+            switch (userInput) {
+                case ">":
+                    page = (page + 1) * 5 < movieList.size() ? page + 1 : page;
+                    break;
+                case "<":
+                    page = Math.max(page - 1, 0);
+                    break;
+                case ">>":
+                    page = movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) - 1 : Math.round(movieList.size() / 5);
+                    break;
+                case "<<":
+                    page = 0;
+                    break;
+                case "Back":
+                    return;
+                default:
+                    try {
+                        int indexInput = Integer.parseInt(userInput) - 1;
+                        if (indexInput >= 0 && indexInput < movieList.size()) {
+                            currentMovie = db.getMovie(dbconn, movieList.get(indexInput).id);
+                        }
+                    } catch (NumberFormatException e) {
+                        for (Movie m : movieList) {
+                            if (m.title.equalsIgnoreCase(userInput)) {
+                                currentMovie = db.getMovie(dbconn, m.id);
+                            }
+                        }
+                    }
+            }
 
+            if (currentMovie != null) {
+                System.out.printf("Updating %s\nTitle (currently %s): ", currentMovie.title, currentMovie.title);
+                String title = toTitleCase(scanner.nextLine().strip());
+                System.out.printf("Director (Name, currently %s): ", currentMovie.director.name);
+                String director = toTitleCase(scanner.nextLine().strip());
+                System.out.printf("Year (YYYY, currently %s): ", currentMovie.year);
+                String year = scanner.nextLine().strip();
+                System.out.printf("Runtime (in Minutes, currently %s): ", currentMovie.runtime);
+                String runtime = scanner.nextLine().strip();
+                System.out.printf("Genre (separated by ',' comma, currently %s): ", Arrays.stream(currentMovie.genre).toArray().toString());
+                String genre = scanner.nextLine().strip();
+
+                Director foundDirector = currentMovie.director;
+                if (!director.equals("")) {
+                    foundDirector = db.getDirector(dbconn, director);
+                    if (foundDirector == null) {
+                        foundDirector = db.createDirector(dbconn, this.toTitleCase(director), null);
+                    }
+                }
+
+                Integer intyear = currentMovie.year;
+                if (!year.equals("")) {
+                    try {
+                        intyear = Integer.valueOf(year);
+                    } catch (NumberFormatException e) {
+                        System.out.println("An error has occurred while parsing 'year'; reverting to current.");
+                    }
+                }
+
+                Integer intruntime = currentMovie.runtime;
+                if (!runtime.equals("")) {
+                    try {
+                        intruntime = Integer.valueOf(runtime);
+                    } catch (NumberFormatException e) {
+                        System.out.println("An error has occurred while parsing 'runtime'; reverting to current.");
+                    }
+                }
+
+                String [] genres = currentMovie.genre;
+                if (!genre.equals("")) {
+                    genres = genre.split(",");
+                    for (int i = 0; i < genres.length; i++) {
+                        genres[i] = this.toTitleCase(genres[i]).strip();
+                    }
+                }
+                db.updateMovie(dbconn, currentMovie, foundDirector, title, intyear, intruntime, genres);
+                currentMovie = null;
+                movieList = db.pullMovies(dbconn);
+            }
+        }
+    }
+
+    public void deleteMovies(Scanner scanner) {
+        String userInput = "";
+        Repository db = new Repository();
+        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
+        ArrayList<Movie> movieList = db.pullMovies(dbconn);
+        Movie currentMovie = null;
+        int page = 0;
+        while (userInput != "Back") {
+            for (int i = page * 5; i < Math.min(page * 5 + 5, movieList.size()); i++) {
+                System.out.printf("%s: %s by %s\n", i + 1, movieList.get(i).title, movieList.get(i).director.name);
+            }
+            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) : Math.round(movieList.size() / 5) + 1);
+            System.out.print("Enter the number/name of the movie you want to delete, or [Back] to cancel.\n> ");
+            userInput = this.toTitleCase(scanner.nextLine().strip());
+            switch (userInput) {
+                case ">":
+                    page = (page + 1) * 5 < movieList.size() ? page + 1 : page;
+                    break;
+                case "<":
+                    page = Math.max(page - 1, 0);
+                    break;
+                case ">>":
+                    page = movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) - 1 : Math.round(movieList.size() / 5);
+                    break;
+                case "<<":
+                    page = 0;
+                    break;
+                case "Back":
+                    return;
+                default:
+                    try {
+                        int indexInput = Integer.parseInt(userInput) - 1;
+                        if (indexInput >= 0 && indexInput < movieList.size()) {
+                            currentMovie = db.getMovie(dbconn, movieList.get(indexInput).id);
+                        }
+                    } catch (NumberFormatException e) {
+                        for (Movie m : movieList) {
+                            if (m.title.equalsIgnoreCase(userInput)) {
+                                currentMovie = db.getMovie(dbconn, m.id);
+                            }
+                        }
+                    }
+            }
+
+            if (currentMovie != null) {
+                db.deleteMovie(dbconn, currentMovie);
+                currentMovie = null;
+                movieList = db.pullMovies(dbconn);
+            }
+        }
     }
 
     public String toTitleCase(String title) {

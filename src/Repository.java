@@ -21,30 +21,6 @@ public class Repository {
         return conn;
     }
 
-//    public void createTable(Connection conn, String table_name) {
-//        Statement statement;
-//        try {
-//            String query = "create table " + table_name + "(empid SERIAL, name varchar(200), address varchar(200), primary key(empid));";
-//            statement = conn.createStatement();
-//            statement.executeUpdate(query);
-//            System.out.println("Table Created");
-//        } catch (Exception e) {
-//            System.out.println(e);
-//        }
-//    }
-//
-//    public void insert_row(Connection conn, String table_name, String name, String address) {
-//        Statement statement;
-//        try {
-//            String query = String.format("insert into %s(name, address) values('%s', '%s');", table_name, name, address);
-//            statement = conn.createStatement();
-//            statement.executeUpdate(query);
-//            System.out.println("Row Inserted");
-//        } catch (Exception e) {
-//            System.out.println(e);
-//        }
-//    }
-
     public ArrayList<Movie> pullMovies(Connection conn) {
         PreparedStatement statement;
         try {
@@ -123,8 +99,6 @@ public class Repository {
             statement.setString(1, name);
 
             if (age != null) {
-                System.out.println(age);
-                System.out.println("fuck");
                 statement.setInt(2, age);
             } else {
                 statement.setNull(2, Types.INTEGER);
@@ -160,16 +134,20 @@ public class Repository {
     public void createMovie(Connection conn, Director director, String title, Integer year, Integer runtime, String[] genre) {
         PreparedStatement statement;
         try {
+
+            Movie duplicate = this.findDuplicate(conn, title);
+            if (duplicate != null) {
+                System.out.println("Duplicate Found");
+                this.updateMovie(conn, duplicate, duplicate.director, String.format("%s (%s)", duplicate.title, duplicate.year), duplicate.year, duplicate.runtime, duplicate.genre);
+                title = String.format("%s (%s)", title, year != null ? year : "Unknown Year");
+            }
+
             String sql = """
                     INSERT INTO movies (director_id, title, year, runtime, genre)
                         VALUES (?, ?, ?, ?, ?)""";
             statement = conn.prepareStatement(sql);
 
-            if (director != null) {
-                statement.setInt(1, director.id);
-            } else {
-                statement.setNull(1, Types.INTEGER);
-            }
+            statement.setInt(1, director.id);
 
             statement.setString(2, title);
 
@@ -201,7 +179,57 @@ public class Repository {
         }
     }
 
-    public void updateMovie(Connection conn, Movie movie, Director director, String title, int year, int runtime, String[] genre) {
+    public Movie getMovie(Connection conn, int id) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    WHERE movies.id = ?;""";
+            statement = conn.prepareStatement(sql);
+            statement.setInt(1, id);
+            ResultSet test = statement.executeQuery();
+            test.next();
+            String[] genre = test.getArray("genre").toString().split(",");
+            for (int i = 0; i < genre.length; i++) {
+                genre[i] = genre[i].replaceAll("[{}]", "");
+            }
+            return new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
+        } catch (Exception e) {
+            System.out.println(e);
+            return null;
+        }
+    }
+
+    public Movie findDuplicate(Connection conn, String title) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    WHERE title = ?;""";
+            statement = conn.prepareStatement(sql);
+            statement.setString(1, title);
+            ResultSet test = statement.executeQuery();
+            test.next();
+            String[] genre = test.getArray("genre").toString().split(",");
+            for (int i = 0; i < genre.length; i++) {
+                genre[i] = genre[i].replaceAll("[{}]", "");
+            }
+            return new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
+//            if (duplicate != null) {
+//                System.out.println("Found a duplicate");
+//                this.updateMovie(conn, duplicate, duplicate.director, String.format("%s (%s)", duplicate.title, duplicate.year), duplicate.year, duplicate.runtime, duplicate.genre);
+//            }
+        } catch (Exception e) {
+            System.out.println(e);
+            return null;
+        }
+    }
+
+    public void updateMovie(Connection conn, Movie movie, Director director, String title, Integer year, Integer runtime, String[] genre) {
         PreparedStatement statement;
         try {
             String sql = """
@@ -210,40 +238,65 @@ public class Repository {
                         title = ?,
                         year = ?,
                         runtime = ?,
-                        genre = ?,
+                        genre = ?
                     WHERE id = ?;""";
             statement = conn.prepareStatement(sql);
-            statement.setInt(1, director.id);
+            System.out.printf("%s %s %s %s %s %s\n", movie.id, director.id, title, year, runtime, genre.toString());
+            if (director != null) {
+                statement.setInt(1, director.id);
+            } else {
+                statement.setNull(1, Types.INTEGER);
+            }
+
+            if (title.contains(String.format("(%s)", movie.year)) || title.contains("Unknown Year")) {
+                title.replace("(Unknown Year)", String.format("(%s)", year));
+                title.replace(String.format("(%s)", movie.year), String.format("(%s)", year));
+            }
             statement.setString(2, title);
-            statement.setInt(3, year);
-            statement.setInt(4, runtime);
-            statement.setArray(5, conn.createArrayOf("VARCHAR", genre));
+
+            if (year != null) {
+                statement.setInt(3, year);
+            } else {
+                statement.setNull(3, Types.INTEGER);
+            }
+
+            if (runtime != null) {
+                statement.setInt(4, runtime);
+            } else {
+                statement.setNull(4, Types.INTEGER);
+            }
+
+            if (genre.length != 0) {
+                statement.setArray(5, conn.createArrayOf("VARCHAR", genre));
+            } else {
+                statement.setNull(5, Types.ARRAY);
+            }
+
             statement.setInt(6, movie.id);
-            ResultSet results = statement.executeQuery();
+
+            statement.execute();
+            statement.close();
+
             System.out.printf("Movie %s '%s' Updated", movie.id, title);
         } catch (Exception e) {
             System.out.println(e);
         }
     }
 
-//    public Movie getMovie(Connection conn, String title) {
-//        PreparedStatement statement;
-//        try {
-//            String sql = "SELECT * FROM movie WHERE title=?;";
-//            statement = conn.prepareStatement(sql);
-//            statement.setString(1, title);
-//            ResultSet test = statement.executeQuery();
-//            System.out.println(test);
-//            test.next();
-////            return test.getInt("id");
-//            return new Movie(test.getInt("id"), this.getDirector(conn, test.getInt("director_id")).getString("name"), test.getInt("age"));
-//        } catch (Exception e) {
-//            System.out.println(e);
-//            return null;
-//        }
-//    }
+    public void deleteMovie(Connection conn, Movie movie) {
+        PreparedStatement statement;
+        try {
+            String sql = "DELETE FROM movies WHERE id = ?;";
+            statement = conn.prepareStatement(sql);
+            statement.setInt(1, movie.id);
+            statement.execute();
+            statement.close();
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
 
-    public void rentMovie(Connection conn, Account account, int movieId) {
+    public void rentMovie(Connection conn, Account account, Movie movie) {
         PreparedStatement statement;
         try {
             String sql = """
@@ -252,15 +305,15 @@ public class Repository {
                     WHERE id = ?;""";
             statement = conn.prepareStatement(sql);
             statement.setInt(1, account.id);
-            statement.setInt(2, movieId);
+            statement.setInt(2, movie.id);
             ResultSet test = statement.executeQuery();
-            System.out.println(test);
+            System.out.println("Rented " + movie.title);
         } catch (Exception e) {
             System.out.println(e);
         }
     }
 
-    public void returnMovie(Connection conn, int movieId) {
+    public void returnMovie(Connection conn, Movie movie) {
         PreparedStatement statement;
         try {
             String sql = """
@@ -269,9 +322,9 @@ public class Repository {
                     WHERE id = ?;""";
             statement = conn.prepareStatement(sql);
             statement.setNull(1, Types.INTEGER);
-            statement.setInt(2, movieId);
+            statement.setInt(2, movie.id);
             ResultSet test = statement.executeQuery();
-            System.out.println(test);
+            System.out.println("Rented " + movie.title);
         } catch (Exception e) {
             System.out.println(e);
         }
