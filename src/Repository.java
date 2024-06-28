@@ -16,7 +16,7 @@ public class Repository {
                 System.out.println("Connection Failed");
             }
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error Connecting to Database");
         }
         return conn;
     }
@@ -33,15 +33,80 @@ public class Repository {
             ResultSet test = statement.executeQuery();
             ArrayList<Movie> movieList = new ArrayList<>();
             while (test.next()) {
-                String [] genre = test.getArray("genre").toString().split(",");
-                for (int i = 0; i < genre.length; i++) {
-                    genre[i] = genre[i].replaceAll("[{}]", "");
+                String [] genre = {};
+                try {
+                    genre = test.getArray("genre").toString().split(",");
+                    for (int i = 0; i < genre.length; i++) {
+                        genre[i] = genre[i].replaceAll("[{}]", "");
+                    }
+                } catch (NullPointerException e) {
                 }
                 movieList.add(new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
             return movieList;
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error pulling all movies");
+            return null;
+        }
+    }
+
+    public ArrayList<Movie> rentedMovies(Connection conn, Account user) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    WHERE rented_by = ?
+                    ORDER BY title;""";
+            statement = conn.prepareStatement(sql);
+            statement.setInt(1, user.id);
+            ResultSet test = statement.executeQuery();
+            ArrayList<Movie> movieList = new ArrayList<>();
+            while (test.next()) {
+                String [] genre = {};
+                try {
+                    genre = test.getArray("genre").toString().split(",");
+                    for (int i = 0; i < genre.length; i++) {
+                        genre[i] = genre[i].replaceAll("[{}]", "");
+                    }
+                } catch (NullPointerException e) {
+                }
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
+            }
+            return movieList;
+        } catch (Exception e) {
+            System.out.println("Error pulling rented movies");
+            return null;
+        }
+    }
+
+    public ArrayList<Movie> availableMovies(Connection conn) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    WHERE rented_by IS NULL
+                    ORDER BY title;""";
+            statement = conn.prepareStatement(sql);
+            ResultSet test = statement.executeQuery();
+            ArrayList<Movie> movieList = new ArrayList<>();
+            while (test.next()) {
+                String [] genre = {};
+                try {
+                    genre = test.getArray("genre").toString().split(",");
+                    for (int i = 0; i < genre.length; i++) {
+                        genre[i] = genre[i].replaceAll("[{}]", "");
+                    }
+                } catch (NullPointerException e) {
+                }
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
+            }
+            return movieList;
+        } catch (Exception e) {
+            System.out.println("Error pulling available movies");
             return null;
         }
     }
@@ -56,11 +121,11 @@ public class Repository {
                 System.out.println(String.format("%s %s %s %s %s %s %s", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by")));
             }
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error filtering movies");
         }
     }
 
-    public void availableMovies(Connection conn) {
+    public void printAvailableMovies(Connection conn) {
         PreparedStatement statement;
         try {
             String sql = "SELECT * FROM movies WHERE rented_by IS NULL;";
@@ -70,64 +135,7 @@ public class Repository {
                 System.out.println(String.format("%s %s %s %s %s %s %s", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by") != 0 ? "Rented" : "Available"));
             }
         } catch (Exception e) {
-            System.out.println(e);
-        }
-    }
-
-    public void pullDirectors(Connection conn) {
-        PreparedStatement statement;
-        try {
-            String sql = "SELECT * FROM director;";
-            statement = conn.prepareStatement(sql);
-            ResultSet test = statement.executeQuery();
-            while (test.next()) {
-                System.out.println(String.format("%s %s %s", test.getInt("id"), test.getString("name"), test.getInt("age")));
-            }
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-    }
-
-    public Director createDirector(Connection conn, String name, Integer age) {
-        PreparedStatement statement;
-        try {
-            String sql = """
-                    INSERT INTO director (name, age)
-                        VALUES (?, ?);
-                    """;
-            statement = conn.prepareStatement(sql);
-            statement.setString(1, name);
-
-            if (age != null) {
-                statement.setInt(2, age);
-            } else {
-                statement.setNull(2, Types.INTEGER);
-            }
-
-            statement.execute();
-            statement.close();
-            System.out.println("Created New Director Entry: " + name);
-            return this.getDirector(conn, name);
-        } catch (Exception e) {
-            System.out.println(e);
-            return null;
-        }
-    }
-
-    public Director getDirector(Connection conn, String name) {
-        PreparedStatement statement;
-        try {
-            String sql = "SELECT * FROM director WHERE name=?;";
-            statement = conn.prepareStatement(sql);
-            statement.setString(1, name);
-            ResultSet test = statement.executeQuery();
-            System.out.println(test);
-            test.next();
-//            return test.getInt("id");
-            return new Director(test.getInt("id"), test.getString("name"), test.getInt("age"));
-        } catch (Exception e) {
-            System.out.println(e);
-            return null;
+            System.out.println("Error printing available movies");
         }
     }
 
@@ -137,7 +145,6 @@ public class Repository {
 
             Movie duplicate = this.findDuplicate(conn, title);
             if (duplicate != null) {
-                System.out.println("Duplicate Found");
                 this.updateMovie(conn, duplicate, duplicate.director, String.format("%s (%s)", duplicate.title, duplicate.year), duplicate.year, duplicate.runtime, duplicate.genre);
                 title = String.format("%s (%s)", title, year != null ? year : "Unknown Year");
             }
@@ -175,7 +182,7 @@ public class Repository {
             System.out.println(String.format("Created Movie %s", title));
 
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error creating movie");
         }
     }
 
@@ -191,13 +198,17 @@ public class Repository {
             statement.setInt(1, id);
             ResultSet test = statement.executeQuery();
             test.next();
-            String[] genre = test.getArray("genre").toString().split(",");
-            for (int i = 0; i < genre.length; i++) {
-                genre[i] = genre[i].replaceAll("[{}]", "");
+            String [] genre = {};
+            try {
+                genre = test.getArray("genre").toString().split(",");
+                for (int i = 0; i < genre.length; i++) {
+                    genre[i] = genre[i].replaceAll("[{}]", "");
+                }
+            } catch (NullPointerException e) {
             }
             return new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error getting movie");
             return null;
         }
     }
@@ -214,17 +225,18 @@ public class Repository {
             statement.setString(1, title);
             ResultSet test = statement.executeQuery();
             test.next();
-            String[] genre = test.getArray("genre").toString().split(",");
-            for (int i = 0; i < genre.length; i++) {
-                genre[i] = genre[i].replaceAll("[{}]", "");
+            String [] genre = {};
+            try {
+                genre = test.getArray("genre").toString().split(",");
+                for (int i = 0; i < genre.length; i++) {
+                    genre[i] = genre[i].replaceAll("[{}]", "");
+                }
+            } catch (NullPointerException e) {
             }
             return new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
-//            if (duplicate != null) {
-//                System.out.println("Found a duplicate");
-//                this.updateMovie(conn, duplicate, duplicate.director, String.format("%s (%s)", duplicate.title, duplicate.year), duplicate.year, duplicate.runtime, duplicate.genre);
-//            }
+
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error finding Duplicate");
             return null;
         }
     }
@@ -241,7 +253,7 @@ public class Repository {
                         genre = ?
                     WHERE id = ?;""";
             statement = conn.prepareStatement(sql);
-            System.out.printf("%s %s %s %s %s %s\n", movie.id, director.id, title, year, runtime, genre.toString());
+//            System.out.printf("%s %s %s %s %s %s\n", movie.id, director.id, title, year, runtime, genre.toString());
             if (director != null) {
                 statement.setInt(1, director.id);
             } else {
@@ -249,8 +261,8 @@ public class Repository {
             }
 
             if (title.contains(String.format("(%s)", movie.year)) || title.contains("Unknown Year")) {
-                title.replace("(Unknown Year)", String.format("(%s)", year));
-                title.replace(String.format("(%s)", movie.year), String.format("(%s)", year));
+                title = title.replace("(Unknown Year)", String.format("(%s)", year));
+                title = title.replace(String.format("(%s)", movie.year), String.format("(%s)", year));
             }
             statement.setString(2, title);
 
@@ -279,7 +291,7 @@ public class Repository {
 
             System.out.printf("Movie %s '%s' Updated", movie.id, title);
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error updating movie");
         }
     }
 
@@ -292,7 +304,7 @@ public class Repository {
             statement.execute();
             statement.close();
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error deleting movie");
         }
     }
 
@@ -309,7 +321,7 @@ public class Repository {
             ResultSet test = statement.executeQuery();
             System.out.println("Rented " + movie.title);
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error renting movie");
         }
     }
 
@@ -324,13 +336,13 @@ public class Repository {
             statement.setNull(1, Types.INTEGER);
             statement.setInt(2, movie.id);
             ResultSet test = statement.executeQuery();
-            System.out.println("Rented " + movie.title);
+            System.out.println("Returned " + movie.title);
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error returning movie");
         }
     }
 
-    public void createAccount(Connection conn, String username, String password, boolean isAdmin) {
+    public Account createAccount(Connection conn, String username, String password, boolean isAdmin) {
         PreparedStatement statement;
         try {
             String sql = """
@@ -340,10 +352,13 @@ public class Repository {
             statement.setString(1, username);
             statement.setString(2, password);
             statement.setBoolean(3, isAdmin);
-            ResultSet newAcc = statement.executeQuery();
+            statement.execute();
+            statement.close();
             System.out.println("Account Created");
+            return this.getAccount(conn, username, password);
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error creating account");
+            return null;
         }
     }
 
@@ -358,12 +373,199 @@ public class Repository {
             ResultSet results = statement.executeQuery();
             Account user = null;
             while (results.next()) {
-                user = new Account(results.getInt("id"), results.getString("username"), results.getString("password"), results.getBoolean("admin"));
+                user = new Account(results.getInt("id"), results.getString("username"), results.getBoolean("admin"));
             }
             return user;
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("Error getting account");
             return null;
+        }
+    }
+
+    public ArrayList<Account> pullCustomers(Connection conn) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    SELECT username, id, admin
+                    FROM users
+                    WHERE NOT admin
+                    ORDER BY id;""";
+            statement = conn.prepareStatement(sql);
+            ResultSet test = statement.executeQuery();
+            ArrayList<Account> customerList = new ArrayList<>();
+            while (test.next()) {
+                customerList.add(new Account(test.getInt("id"), test.getString("username"), test.getBoolean("admin")));
+            }
+            return customerList;
+        } catch (Exception e) {
+            System.out.println("Error pulling customers");
+            return null;
+        }
+    }
+
+    public ArrayList<Account> pullAdmin(Connection conn) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    SELECT username, id, admin
+                    FROM users
+                    WHERE admin
+                    ORDER BY id;""";
+            statement = conn.prepareStatement(sql);
+            ResultSet test = statement.executeQuery();
+            ArrayList<Account> customerList = new ArrayList<>();
+            while (test.next()) {
+                customerList.add(new Account(test.getInt("id"), test.getString("username"), test.getBoolean("admin")));
+            }
+            return customerList;
+        } catch (Exception e) {
+            System.out.println("Error pulling admin");
+            return null;
+        }
+    }
+
+    public void promoteCustomer(Connection conn, Account user) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    UPDATE users
+                    SET admin = ?
+                    WHERE id = ?""";
+            statement = conn.prepareStatement(sql);
+            statement.setBoolean(1, true);
+            statement.setInt(2, user.id);
+            statement.execute();
+            statement.close();
+        } catch (Exception e) {
+            System.out.println("Error promoting customers");
+        }
+    }
+
+    public void demoteAdmin(Connection conn, Account user) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    UPDATE users
+                    SET admin = ?
+                    WHERE id = ?""";
+            statement = conn.prepareStatement(sql);
+            statement.setBoolean(1, false);
+            statement.setInt(2, user.id);
+            statement.execute();
+            statement.close();
+        } catch (Exception e) {
+            System.out.println("Error demoting user");
+        }
+    }
+
+    public ArrayList<Account> pullUsers(Connection conn) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    SELECT username, id, admin
+                    FROM users
+                    ORDER BY NOT admin;""";
+            statement = conn.prepareStatement(sql);
+            ResultSet test = statement.executeQuery();
+            ArrayList<Account> customerList = new ArrayList<>();
+            while (test.next()) {
+                customerList.add(new Account(test.getInt("id"), test.getString("username"), test.getBoolean("admin")));
+            }
+            return customerList;
+        } catch (Exception e) {
+            System.out.println("Error pulling admin");
+            return null;
+        }
+    }
+
+    public void deleteUser(Connection conn, Account account) {
+        PreparedStatement statement;
+        try {
+            String sql = "DELETE FROM users WHERE id = ?;";
+            statement = conn.prepareStatement(sql);
+            statement.setInt(1, account.id);
+            statement.execute();
+            statement.close();
+        } catch (Exception e) {
+            System.out.println("Error deleting movie");
+        }
+    }
+
+    public ArrayList<Director> pullDirectors(Connection conn) {
+        PreparedStatement statement;
+        try {
+            String sql = "SELECT * FROM director;";
+            statement = conn.prepareStatement(sql);
+            ResultSet test = statement.executeQuery();
+            ArrayList<Director> directorList = new ArrayList<>();
+            while (test.next()) {
+                directorList.add(new Director(test.getInt("id"), test.getString("name")));
+            }
+            return directorList;
+        } catch (Exception e) {
+            System.out.println("Error pulling all directors");
+            return null;
+        }
+    }
+
+    public Director createDirector(Connection conn, String name) {
+        PreparedStatement statement;
+        try {
+            String sql = """
+                    INSERT INTO director (name)
+                        VALUES (?);
+                    """;
+            statement = conn.prepareStatement(sql);
+            statement.setString(1, name);
+            statement.execute();
+            statement.close();
+            System.out.println("Created New Director Entry: " + name);
+            return this.getDirector(conn, name);
+        } catch (Exception e) {
+            System.out.println("Error creating director");
+            return null;
+        }
+    }
+
+    public Director getDirector(Connection conn, String name) {
+        PreparedStatement statement;
+        try {
+            String sql = "SELECT * FROM director WHERE name=?;";
+            statement = conn.prepareStatement(sql);
+            statement.setString(1, name);
+            ResultSet test = statement.executeQuery();
+            test.next();
+            return new Director(test.getInt("id"), test.getString("name"));
+        } catch (Exception e) {
+            System.out.println("Error getting director");
+            return null;
+        }
+    }
+
+    public void updateDirector(Connection conn, Director director) {
+        PreparedStatement statement;
+        try {
+            String sql = "UPDATE director SET name = ? WHERE id = ?;";
+            statement = conn.prepareStatement(sql);
+            statement.setString(1, director.name);
+            statement.setInt(2, director.id);
+            statement.execute();
+            statement.close();
+        } catch (Exception e) {
+            System.out.println("Error getting director");
+        }
+    }
+
+    public void deleteDirector(Connection conn, Director director) {
+        PreparedStatement statement;
+        try {
+            String sql = "DELETE FROM director WHERE id = ?;";
+            statement = conn.prepareStatement(sql);
+            statement.setInt(1, director.id);
+            statement.execute();
+            statement.close();
+        } catch (Exception e) {
+            System.out.println("Error getting director");
         }
     }
 }

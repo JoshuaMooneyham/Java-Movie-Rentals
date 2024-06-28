@@ -1,13 +1,22 @@
 CREATE TABLE director (
 	id INT GENERATED ALWAYS AS IDENTITY,
 	name VARCHAR(255) NOT NULL,
-	age INT,
 	PRIMARY KEY(id)
 );
 
+
+CREATE TABLE users (
+    id INT GENERATED ALWAYS AS IDENTITY,
+    username VARCHAR(255),
+    password VARCHAR(255),
+    admin BOOLEAN,
+    PRIMARY KEY(id)
+);
+
+
 CREATE TABLE movies (
 	id INT GENERATED ALWAYS AS IDENTITY,
-	director_id INT,
+	director_id INT NOT NULL,
 	title VARCHAR(255),
 	year INT,
 	runtime INT,
@@ -17,18 +26,10 @@ CREATE TABLE movies (
 	CONSTRAINT fk_director
 		FOREIGN KEY(director_id)
 			REFERENCES director(id)
-			ON DELETE SET NULL
+			ON DELETE CASCADE,
 
-	CONSTRAINT fk_user
+	CONSTRAINT fk_users
 	    FOREIGN KEY(rented_by)
-	        REFERENCES user(id)
+	        REFERENCES users(id)
 	        ON DELETE SET NULL
-);
-
-CREATE TABLE user (
-    id INT GENERATED ALWAYS AS IDENTITY,
-    username VARCHAR(255),
-    password VARCHAR(255),
-    admin BOOLEAN;
-    PRIMARY KEY(id)
 );

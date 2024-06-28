@@ -5,7 +5,7 @@ public class Account {
     public String username;
     public boolean isAdmin;
 
-    public Account(int id, String username, String password, boolean admin) {
+    public Account(int id, String username, boolean admin) {
         this.id = id;
         this.username = username;
         this.isAdmin = admin;

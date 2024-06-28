@@ -1,12 +1,10 @@
 public class Director {
     public int id;
     public String name;
-    public int age;
 
-    public Director(int id, String name, int age) {
+    public Director(int id, String name) {
         this.id = id;
         this.name=name;
-        this.age=age;
     }
 
     public String toString() {
