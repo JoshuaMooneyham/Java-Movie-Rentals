@@ -3,19 +3,22 @@ import java.util.ArrayList;
 import java.util.Scanner;
 
 public class Main {
-    Account currentUser;
-    boolean running = true;
-    boolean adminView;
+    private Account currentUser;
+    private boolean running = true;
+    private boolean adminView;
+    private final Repository db = new Repository();
+    private int page;
 
     public static void main(String[] args) {
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        Main main = new Main();
+        new Main().mainProgramLoop();
+    }
+
+    public void mainProgramLoop() {
         Scanner sc = new Scanner(System.in);
         String userInput;
 
-        while (main.running) {
-            if (main.currentUser == null) {
+        while (this.running) {
+            if (this.currentUser == null) {
                 Account acc = null;
                 System.out.println("Welcome! Would you like to [Log In], [Create] Account, or [Q]uit?");
                 System.out.print("> ");
@@ -23,69 +26,70 @@ public class Main {
                 switch (userInput) {
                     case "log in":
                     case "login":
-                        acc = main.login(sc);
+                        acc = this.login(sc);
                         break;
                     case "create":
-                        acc = main.createAccount(sc);
+                        acc = this.createAccount(sc);
                         break;
                     case "q":
-                        main.quit(sc);
+                    case "quit":
+                        this.quit(sc);
                         break;
                     default:
                         System.out.println("Please enter a valid action.");
                         break;
                 }
                 if (acc != null) {
-                    main.currentUser = acc;
-                    main.adminView = main.currentUser.isAdmin;
+                    this.currentUser = acc;
+                    this.adminView = this.currentUser.isAdmin;
                 }
-            } else if (main.adminView) {
-                System.out.printf("Welcome %s, what would you like to do today?\n", main.currentUser.username);
+            } else if (this.adminView) {
+                System.out.printf("Welcome %s, what would you like to do today?\n", this.currentUser.username);
                 System.out.println("Manage [Movies], Manage [Users], Manage [Directors], View as [Customer], or [Log out]");
                 System.out.print("> ");
                 userInput = sc.nextLine().toLowerCase().strip();
                 switch (userInput) {
                     case "movies":
-                        main.manageMovies(sc);
+                        this.manageMovies(sc);
                         break;
                     case "users":
-                        main.manageUsers(sc);
+                        this.manageUsers(sc);
                         break;
                     case "directors":
-                        main.manageDirectors(sc);
+                        this.manageDirectors(sc);
                         break;
                     case "customer":
-                        main.adminView = false;
+                        this.adminView = false;
                         break;
                     case "logout":
                     case "log out":
-                        main.logout();
+                        this.logout();
                         break;
                     default:
                         System.out.println("Please enter a valid input.");
                         break;
                 }
             } else {
-                System.out.printf("Welcome %s, what would you like to do today?\n", main.currentUser.username);
-                System.out.printf("[View] movies, [Rent] movies, [Return] rented movies, %sor [Logout]\n", main.currentUser.isAdmin ? "[Admin] view, " : "");
+                System.out.printf("Welcome %s, what would you like to do today?\n", this.currentUser.username);
+                System.out.printf("[View] movies, [Rent] movies, [Return] rented movies, %sor [Logout]\n", this.currentUser.isAdmin ? "[Admin] view, " : "");
                 System.out.print("> ");
                 userInput = sc.nextLine().toLowerCase().strip();
                 switch (userInput) {
                     case "view":
-                        main.viewMovies(sc);
+                        this.viewMovies(sc);
                         break;
                     case "logout":
-                        main.logout();
+                        this.logout();
                         break;
                     case "rent":
-                        main.rentMovies(sc);
+                        this.rentMovies(sc);
                         break;
                     case "return":
-                        main.returnMovies(sc);
+                        this.returnMovies(sc);
                         break;
                     case "admin":
-                        if (main.currentUser.isAdmin) {
-                            main.adminView = true;
+                        if (this.currentUser.isAdmin) {
+                            this.adminView = true;
                             break;
                         }
                     default:
@@ -95,22 +99,19 @@ public class Main {
         }
     }
 
-    public Account login(Scanner scanner) {
+    private Account login(Scanner scanner) {
         System.out.print("Username: ");
         String username = scanner.nextLine();
         System.out.print("Password: ");
         String password = scanner.nextLine();
         try {
-            Repository repo = new Repository();
-            Connection conn = repo.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-            Account found_account = repo.getAccount(conn, username, password);
+            Account found_account = this.db.getAccount(username, password);
             if (found_account == null) {
                 System.out.println("Could not find any account matching that Username/Password combination.");
             }
             return found_account;
 
         } catch (Exception e) {
-            System.out.println(e);
             return null;
         }
     }
@@ -123,9 +124,7 @@ public class Main {
         System.out.print("Confirm Password: ");
         String password2 = scanner.nextLine();
         if (password.equals(password2)) {
-            Repository repo = new Repository();
-            Connection conn = repo.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-            return repo.createAccount(conn, username, password, false);
+            return this.db.createAccount(username, password, false);
         } else {
             System.out.println("Error: Passwords must match!");
             return null;
@@ -135,108 +134,64 @@ public class Main {
     public void logout() {
         this.currentUser = null;
     }
-
+// Paginated
     public void returnMovies(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Movie> movieList = db.rentedMovies(dbconn, this.currentUser);
+        ArrayList<Movie> movieList = this.db.rentedMovies(this.currentUser);
         Movie currentMovie = null;
-        int page = 0;
-        while (!movieList.isEmpty() && !userInput.equals("Back")) {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, movieList.size()); i++) {
-                System.out.printf("%s: %s by %s\n", i + 1, movieList.get(i).title, movieList.get(i).director != null ? movieList.get(i).director.name : "Unknown Director");
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) : Math.round(movieList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to return, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < movieList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) - 1 : Math.round(movieList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < movieList.size()) {
-                            currentMovie = db.getMovie(dbconn, movieList.get(indexInput).id);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Movie m : movieList) {
-                            if (m.title.equalsIgnoreCase(userInput)) {
-                                currentMovie = db.getMovie(dbconn, m.id);
-                            }
-                        }
+        this.page = 0;
+        while (!movieList.isEmpty() && userInput != null) {
+            userInput = paginateMovies(scanner, movieList, "return", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < movieList.size()) {
+                    currentMovie = movieList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Movie m : movieList) {
+                    if (m.title.equalsIgnoreCase(userInput)) {
+                        currentMovie = m;
                     }
+                }
             }
 
             if (currentMovie != null) {
-                db.returnMovie(dbconn, currentMovie);
-                movieList = db.rentedMovies(dbconn, this.currentUser);
+                this.db.returnMovie(currentMovie);
+                movieList = this.db.rentedMovies(this.currentUser);
             }
         }
+
         if (movieList.isEmpty()) {
             System.out.println("You don't have any rented movies!");
         }
     }
-
+// Paginated
     public void rentMovies(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Movie> movieList = db.availableMovies(dbconn);
+        ArrayList<Movie> movieList = this.db.availableMovies();
         Movie currentMovie = null;
-        int page = 0;
-        while (!movieList.isEmpty() && !userInput.equals("Back")) {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, movieList.size()); i++) {
-                System.out.printf("%s: %s by %s\n", i + 1, movieList.get(i).title, movieList.get(i).director != null ? movieList.get(i).director.name : "Unknown Director");
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) : Math.round(movieList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to rent, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < movieList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) - 1 : Math.round(movieList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < movieList.size()) {
-                            currentMovie = db.getMovie(dbconn, movieList.get(indexInput).id);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Movie m : movieList) {
-                            if (m.title.equalsIgnoreCase(userInput)) {
-                                currentMovie = db.getMovie(dbconn, m.id);
-                            }
-                        }
+        this.page = 0;
+        while (!movieList.isEmpty() && userInput != null) {
+
+            userInput = this.paginateMovies(scanner, movieList, "rent", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < movieList.size()) {
+                    currentMovie = movieList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Movie m : movieList) {
+                    if (m.title.equalsIgnoreCase(userInput)) {
+                        currentMovie = m;
                     }
+                }
             }
 
-            if (currentMovie != null) {
-                db.rentMovie(dbconn, this.currentUser, currentMovie);
-                movieList = db.availableMovies(dbconn);
+            if (currentMovie != null && userInput != null) {
+                this.db.rentMovie(this.currentUser, currentMovie);
+                movieList = this.db.availableMovies();
             }
         }
 
@@ -277,6 +232,111 @@ public class Main {
         }
     }
 
+    public String paginateMovies(Scanner scanner, ArrayList<Movie> movieList, String task, int amount) {
+        String userInput = "";
+        while (!userInput.equals("Back")) {
+            if ((this.page) * amount > movieList.size()) {
+                this.page--;
+            }
+
+            for (int i = this.page * amount; i < Math.min(this.page * amount + amount, movieList.size()); i++) {
+                System.out.printf("%s: %s by %s\n", i + 1, movieList.get(i).title, movieList.get(i).director != null ? movieList.get(i).director.name : "Unknown Director");
+            }
+            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", this.page + 1, movieList.size() % amount == 0 ? Math.round(movieList.size() / amount) : Math.round(movieList.size() / amount) + 1);
+            System.out.printf("Enter the number/name of the movie you want to %s, or [Back] to cancel.\n> ", task);
+            userInput = this.toTitleCase(scanner.nextLine().strip());
+            switch (userInput) {
+                case ">":
+                    this.page = (this.page + 1) * amount < movieList.size() ? this.page + 1 : this.page;
+                    break;
+                case "<":
+                    this.page = Math.max(this.page - 1, 0);
+                    break;
+                case ">>":
+                    this.page = movieList.size() % amount == 0 ? Math.round(movieList.size() / amount) - 1 : Math.round(movieList.size() / amount);
+                    break;
+                case "<<":
+                    this.page = 0;
+                    break;
+                case "Back":
+                    break;
+                default:
+                    return userInput;
+            }
+        }
+        return null;
+    }
+
+    public String paginateUsers(Scanner scanner, ArrayList<Account> accountList, String task, int amount) {
+        String userInput = "";
+        while (!userInput.equals("Back")) {
+            if ((this.page) * amount > accountList.size()) {
+                this.page--;
+            }
+
+            for (int i = this.page * amount; i < Math.min(this.page * amount + amount, accountList.size()); i++) {
+                System.out.printf("%s: %s\n", i + 1, accountList.get(i).username);
+            }
+            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", this.page + 1, accountList.size() % amount == 0 ? Math.round(accountList.size() / amount) : Math.round(accountList.size() / amount) + 1);
+            System.out.printf("Enter the number/name of the user you want to %s, or [Back] to cancel.\n> ", task);
+            userInput = this.toTitleCase(scanner.nextLine().strip());
+            switch (userInput) {
+                case ">":
+                    this.page = (this.page + 1) * amount < accountList.size() ? this.page + 1 : this.page;
+                    break;
+                case "<":
+                    this.page = Math.max(this.page - 1, 0);
+                    break;
+                case ">>":
+                    this.page = accountList.size() % amount == 0 ? Math.round(accountList.size() / amount) - 1 : Math.round(accountList.size() / amount);
+                    break;
+                case "<<":
+                    this.page = 0;
+                    break;
+                case "Back":
+                    break;
+                default:
+                    return userInput;
+            }
+        }
+        return null;
+    }
+
+    public String paginateDirectors(Scanner scanner, ArrayList<Director> directorList, String task, int amount) {
+        String userInput = "";
+        while (!userInput.equals("Back")) {
+            if ((this.page) * amount > directorList.size()) {
+                this.page--;
+            }
+
+            for (int i = this.page * amount; i < Math.min(this.page * amount + amount, directorList.size()); i++) {
+                System.out.printf("%s: %s\n", i + 1, directorList.get(i).name);
+            }
+            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", this.page + 1, directorList.size() % amount == 0 ? Math.round(directorList.size() / amount) : Math.round(directorList.size() / amount) + 1);
+            System.out.printf("Enter the number/name of the director you want to %s, or [Back] to cancel.\n> ", task);
+            userInput = this.toTitleCase(scanner.nextLine().strip());
+            switch (userInput) {
+                case ">":
+                    this.page = (this.page + 1) * amount < directorList.size() ? this.page + 1 : this.page;
+                    break;
+                case "<":
+                    this.page = Math.max(this.page - 1, 0);
+                    break;
+                case ">>":
+                    this.page = directorList.size() % amount == 0 ? Math.round(directorList.size() / amount) - 1 : Math.round(directorList.size() / amount);
+                    break;
+                case "<<":
+                    this.page = 0;
+                    break;
+                case "Back":
+                    break;
+                default:
+                    return userInput;
+            }
+        }
+        return null;
+    }
+
     public void addMovie(Scanner scanner) {
         String title = "";
         System.out.print("Title (or [Back] to cancel): ");
@@ -305,16 +365,13 @@ public class Main {
         System.out.print("Genre (separated by ',' or leave blank): ");
         String genre = scanner.nextLine().strip();
 
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-
-        Director foundDirector = db.getDirector(dbconn, director);
+        Director foundDirector = this.db.getDirector(director);
         if (foundDirector == null) {
-            foundDirector = db.createDirector(dbconn, director);
+            foundDirector = this.db.createDirector(director);
         }
 
         Integer intyear = null;
-        if (!year.equals("")) {
+        if (!year.isEmpty()) {
             try {
                 intyear = Integer.valueOf(year);
             } catch (NumberFormatException e) {
@@ -322,7 +379,7 @@ public class Main {
             }
         }
         Integer intruntime = null;
-        if (!runtime.equals("")) {
+        if (!runtime.isEmpty()) {
             try {
                 intruntime = Integer.valueOf(runtime);
             } catch (NumberFormatException e) {
@@ -330,14 +387,14 @@ public class Main {
             }
         }
         String [] genres = {};
-        if (!genre.equals("")) {
+        if (!genre.isEmpty()) {
             genres = genre.split(",");
             for (int i = 0; i < genres.length; i++) {
                 genres[i] = this.toTitleCase(genres[i]).strip();
             }
         }
-        if (!title.equals("") && title.length() >= 2 && foundDirector != null) {
-            db.createMovie(dbconn, foundDirector, title, intyear, intruntime, genres);
+        if (!title.isEmpty() && title.length() >= 2 && foundDirector != null) {
+            this.db.createMovie(foundDirector, title, intyear, intruntime, genres);
         }
     }
 
@@ -352,77 +409,46 @@ public class Main {
             String [] choices = {"genre", "year", "runtime", "title"};
             for (String value : choices) {
                 if (userInput.equals(value)) {
-                    Repository repo = new Repository();
-                    Connection conn = repo.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-                    repo.filterMovies(conn, value);
+                    this.db.filterMovies(value);
                     skip = true;
                 }
             }
-
             if (!skip) {
                 switch (userInput) {
                     case "back":
                         return;
                     case "all":
-                        Repository repo = new Repository();
-                        Connection conn = repo.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-                        repo.filterMovies(conn, "id");
+                        this.db.filterMovies("id");
                         break;
                     case "available":
-                        Repository repo2 = new Repository();
-                        Connection conn2 = repo2.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-                        repo2.printAvailableMovies(conn2);
+                        this.db.printAvailableMovies();
                         break;
                     default:
                         System.out.println("Please enter a valid action!");
                 }
             }
-
         }
     }
-
+// Paginated
     public void updateMovie(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Movie> movieList = db.pullMovies(dbconn);
+        ArrayList<Movie> movieList = this.db.pullMovies();
         Movie currentMovie = null;
-        int page = 0;
-        while (userInput != "Back") {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, movieList.size()); i++) {
-                System.out.printf("%s: %s by %s\n", i + 1, movieList.get(i).title, movieList.get(i).director != null ? movieList.get(i).director.name : "Unknown Director");
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) : Math.round(movieList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to edit, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < movieList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) - 1 : Math.round(movieList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < movieList.size()) {
-                            currentMovie = db.getMovie(dbconn, movieList.get(indexInput).id);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Movie m : movieList) {
-                            if (m.title.equalsIgnoreCase(userInput)) {
-                                currentMovie = db.getMovie(dbconn, m.id);
-                            }
-                        }
+        this.page = 0;
+        while (userInput != null) {
+            userInput = this.paginateMovies(scanner, movieList, "edit", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < movieList.size()) {
+                    currentMovie = movieList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Movie m : movieList) {
+                    if (m.title.equalsIgnoreCase(userInput)) {
+                        currentMovie = m;
                     }
+                }
             }
 
             if (currentMovie != null) {
@@ -439,21 +465,21 @@ public class Main {
 
                 if (title.length() < 2) {
                     title = currentMovie.title;
-                    if (!title.equals("")) {
+                    if (!title.isEmpty()) {
                         System.out.println("An error has occurred while parsing 'title'; reverting to current.");
                     }
                 }
 
                 Director foundDirector = currentMovie.director;
-                if (!director.equals("")) {
-                    foundDirector = db.getDirector(dbconn, director);
+                if (!director.isEmpty()) {
+                    foundDirector = this.db.getDirector(director);
                     if (foundDirector == null) {
-                        foundDirector = db.createDirector(dbconn, this.toTitleCase(director));
+                        foundDirector = this.db.createDirector(this.toTitleCase(director));
                     }
                 }
 
                 Integer intyear = currentMovie.year;
-                if (!year.equals("")) {
+                if (!year.isEmpty()) {
                     try {
                         intyear = Integer.valueOf(year);
                     } catch (NumberFormatException e) {
@@ -462,7 +488,7 @@ public class Main {
                 }
 
                 Integer intruntime = currentMovie.runtime;
-                if (!runtime.equals("")) {
+                if (!runtime.isEmpty()) {
                     try {
                         intruntime = Integer.valueOf(runtime);
                     } catch (NumberFormatException e) {
@@ -471,68 +497,46 @@ public class Main {
                 }
 
                 String [] genres = currentMovie.genre;
-                if (!genre.equals("")) {
+                if (!genre.isEmpty()) {
                     genres = genre.split(",");
                     for (int i = 0; i < genres.length; i++) {
                         genres[i] = this.toTitleCase(genres[i]).strip();
                     }
                 }
 
-                db.updateMovie(dbconn, currentMovie, foundDirector, title, intyear, intruntime, genres);
+                this.db.updateMovie(currentMovie, foundDirector, title, intyear, intruntime, genres);
                 currentMovie = null;
-                movieList = db.pullMovies(dbconn);
+                movieList = this.db.pullMovies();
             }
         }
     }
-
+// Paginated
     public void deleteMovies(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Movie> movieList = db.pullMovies(dbconn);
+        ArrayList<Movie> movieList = this.db.pullMovies();
         Movie currentMovie = null;
-        int page = 0;
-        while (userInput != "Back") {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, movieList.size()); i++) {
-                System.out.printf("%s: %s by %s\n", i + 1, movieList.get(i).title, movieList.get(i).director.name);
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) : Math.round(movieList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to delete, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < movieList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = movieList.size() % 5 == 0 ? Math.round(movieList.size() / 5) - 1 : Math.round(movieList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < movieList.size()) {
-                            currentMovie = db.getMovie(dbconn, movieList.get(indexInput).id);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Movie m : movieList) {
-                            if (m.title.equalsIgnoreCase(userInput)) {
-                                currentMovie = db.getMovie(dbconn, m.id);
-                            }
-                        }
+        this.page = 0;
+        while (userInput != null) {
+
+            userInput = this.paginateMovies(scanner, movieList, "delete", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < movieList.size()) {
+                    currentMovie = movieList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Movie m : movieList) {
+                    if (m.title.equalsIgnoreCase(userInput)) {
+                        currentMovie = m;
                     }
+                }
             }
 
             if (currentMovie != null) {
-                db.deleteMovie(dbconn, currentMovie);
+                this.db.deleteMovie(currentMovie);
                 currentMovie = null;
-                movieList = db.pullMovies(dbconn);
+                movieList = this.db.pullMovies();
             }
         }
     }
@@ -548,9 +552,7 @@ public class Main {
                     this.promoteUser(scanner);
                     break;
                 case "view":
-                    Repository db = new Repository();
-                    Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-                    ArrayList<Account> accList = db.pullUsers(dbconn);
+                    ArrayList<Account> accList = this.db.pullUsers();
                     for (Account a : accList) {
                         System.out.printf("%s (%s)\n", a.username, a.isAdmin ? "Admin" : "Customer");
                     }
@@ -568,159 +570,93 @@ public class Main {
             }
         }
     }
-
+// Paginated
     public void promoteUser(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Account> accountList = db.pullCustomers(dbconn);
+        ArrayList<Account> accountList = this.db.pullCustomers();
         Account currentAccount = null;
-        int page = 0;
-        while (userInput != "Back") {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, accountList.size()); i++) {
-                System.out.printf("%s: %s (%s)\n", i + 1, accountList.get(i).username, accountList.get(i).isAdmin  ? "Admin" : "Customer");
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, accountList.size() % 5 == 0 ? Math.round(accountList.size() / 5) : Math.round(accountList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to edit, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < accountList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = accountList.size() % 5 == 0 ? Math.round(accountList.size() / 5) - 1 : Math.round(accountList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < accountList.size()) {
-                            currentAccount = accountList.get(indexInput);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Account acc : accountList) {
-                            if (acc.username.equalsIgnoreCase(userInput)) {
-                                currentAccount = acc;
-                            }
-                        }
+        this.page = 0;
+        while (userInput != null) {
+
+            userInput = this.paginateUsers(scanner, accountList, "promote", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < accountList.size()) {
+                    currentAccount = accountList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Account acc : accountList) {
+                    if (acc.username.equalsIgnoreCase(userInput)) {
+                        currentAccount = acc;
                     }
+                }
             }
 
             if (currentAccount != null) {
-                db.promoteCustomer(dbconn, currentAccount);
+                this.db.promoteCustomer(currentAccount);
                 currentAccount = null;
-                accountList = db.pullCustomers(dbconn);
+                accountList = this.db.pullCustomers();
             }
         }
     }
-
+// Paginated
     public void demoteUser(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Account> accountList = db.pullAdmin(dbconn);
+        ArrayList<Account> accountList = this.db.pullAdmin();
         Account currentAccount = null;
-        int page = 0;
-        while (userInput != "Back") {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, accountList.size()); i++) {
-                System.out.printf("%s: %s (%s)\n", i + 1, accountList.get(i).username, accountList.get(i).isAdmin  ? "Admin" : "Customer");
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, accountList.size() % 5 == 0 ? Math.round(accountList.size() / 5) : Math.round(accountList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to edit, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < accountList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = accountList.size() % 5 == 0 ? Math.round(accountList.size() / 5) - 1 : Math.round(accountList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < accountList.size()) {
-                            currentAccount = accountList.get(indexInput);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Account acc : accountList) {
-                            if (acc.username.equalsIgnoreCase(userInput)) {
-                                currentAccount = acc;
-                            }
-                        }
+        this.page = 0;
+        while (userInput != null) {
+
+            userInput = this.paginateUsers(scanner, accountList, "demote", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < accountList.size()) {
+                    currentAccount = accountList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Account acc : accountList) {
+                    if (acc.username.equalsIgnoreCase(userInput)) {
+                        currentAccount = acc;
                     }
+                }
             }
 
             if (currentAccount != null) {
-                db.demoteAdmin(dbconn, currentAccount);
+                this.db.demoteAdmin(currentAccount);
                 currentAccount = null;
-                accountList = db.pullAdmin(dbconn);
+                accountList = this.db.pullAdmin();
             }
         }
     }
-
+// Paginated
     public void deleteUsers(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Account> accountList = db.pullUsers(dbconn);
+        ArrayList<Account> accountList = this.db.pullUsers();
         Account currentAccount = null;
-        int page = 0;
-        while (userInput != "Back") {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, accountList.size()); i++) {
-                System.out.printf("%s: %s (%s)\n", i + 1, accountList.get(i).username, accountList.get(i).isAdmin  ? "Admin" : "Customer");
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, accountList.size() % 5 == 0 ? Math.round(accountList.size() / 5) : Math.round(accountList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to edit, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < accountList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = accountList.size() % 5 == 0 ? Math.round(accountList.size() / 5) - 1 : Math.round(accountList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < accountList.size()) {
-                            currentAccount = accountList.get(indexInput);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Account acc : accountList) {
-                            if (acc.username.equalsIgnoreCase(userInput)) {
-                                currentAccount = acc;
-                            }
-                        }
+        this.page = 0;
+        while (userInput != null) {
+
+            userInput = this.paginateUsers(scanner, accountList, "delete", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < accountList.size()) {
+                    currentAccount = accountList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Account acc : accountList) {
+                    if (acc.username.equalsIgnoreCase(userInput)) {
+                        currentAccount = acc;
                     }
+                }
             }
 
             if (currentAccount != null) {
-                db.deleteUser(dbconn, currentAccount);
+                this.db.deleteUser(currentAccount);
                 currentAccount = null;
-                accountList = db.pullUsers(dbconn);
+                accountList = this.db.pullUsers();
             }
         }
     }
@@ -764,132 +700,86 @@ public class Main {
             }
         }
 
-        if (!name.equals("") && name.length() >= 2) {
-            Repository db = new Repository();
-            Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-            db.createDirector(dbconn, name);
+        if (!name.isEmpty() && name.length() >= 2) {
+            this.db.createDirector(name);
         }
     }
 
     public void viewDirectors(Scanner scanner) {
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Director> directorList = db.pullDirectors(dbconn);
+        ArrayList<Director> directorList = this.db.pullDirectors();
         for (Director d : directorList) {
             System.out.printf("%s\n", d.name);
         }
     }
-
+// Paginated
     public void updateDirectors(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Director> directorList = db.pullDirectors(dbconn);
+        ArrayList<Director> directorList = this.db.pullDirectors();
         Director currentDirector = null;
-        int page = 0;
-        while (userInput != "Back") {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, directorList.size()); i++) {
-                System.out.printf("%s: %s\n", i + 1, directorList.get(i).name);
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, directorList.size() % 5 == 0 ? Math.round(directorList.size() / 5) : Math.round(directorList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to edit, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < directorList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = directorList.size() % 5 == 0 ? Math.round(directorList.size() / 5) - 1 : Math.round(directorList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < directorList.size()) {
-                            currentDirector = directorList.get(indexInput);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Director d : directorList) {
-                            if (d.name.equalsIgnoreCase(userInput)) {
-                                currentDirector = d;
-                            }
-                        }
+        this.page = 0;
+        while (userInput != null) {
+
+            userInput = this.paginateDirectors(scanner, directorList, "update", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < directorList.size()) {
+                    currentDirector = directorList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Director d : directorList) {
+                    if (d.name.equalsIgnoreCase(userInput)) {
+                        currentDirector = d;
                     }
+                }
             }
 
             if (currentDirector != null) {
                 System.out.printf("Updating %s\nName (currently %s): ", currentDirector.name, currentDirector.name);
-                String name = toTitleCase(scanner.nextLine().strip());
+                String name = this.toTitleCase(scanner.nextLine().strip());
 
                 if (name.length() < 2) {
                     name = currentDirector.name;
-                    if (!name.equals("")) {
+                    if (!name.isEmpty()) {
                         System.out.println("An error has occurred while parsing 'title'; reverting to current.");
                     }
+                } else {
+                    currentDirector.name = name;
                 }
 
-                db.updateDirector(dbconn, currentDirector);
+                this.db.updateDirector(currentDirector);
                 currentDirector = null;
-                directorList = db.pullDirectors(dbconn);
+                directorList = this.db.pullDirectors();
             }
         }
     }
-
+// Paginated
     public void deleteDirectors(Scanner scanner) {
         String userInput = "";
-        Repository db = new Repository();
-        Connection dbconn = db.connectToDatabase("moviedb", "postgres", "!Jmjm1859");
-        ArrayList<Director> directorList = db.pullDirectors(dbconn);
+        ArrayList<Director> directorList = this.db.pullDirectors();
         Director currentDirector = null;
-        int page = 0;
-        while (userInput != "Back") {
-            for (int i = page * 5; i < Math.min(page * 5 + 5, directorList.size()); i++) {
-                System.out.printf("%s: %s\n", i + 1, directorList.get(i).name);
-            }
-            System.out.printf("[<<][<]            %s/%s            [>][>>]\n", page + 1, directorList.size() % 5 == 0 ? Math.round(directorList.size() / 5) : Math.round(directorList.size() / 5) + 1);
-            System.out.print("Enter the number/name of the movie you want to edit, or [Back] to cancel.\n> ");
-            userInput = this.toTitleCase(scanner.nextLine().strip());
-            switch (userInput) {
-                case ">":
-                    page = (page + 1) * 5 < directorList.size() ? page + 1 : page;
-                    break;
-                case "<":
-                    page = Math.max(page - 1, 0);
-                    break;
-                case ">>":
-                    page = directorList.size() % 5 == 0 ? Math.round(directorList.size() / 5) - 1 : Math.round(directorList.size() / 5);
-                    break;
-                case "<<":
-                    page = 0;
-                    break;
-                case "Back":
-                    return;
-                default:
-                    try {
-                        int indexInput = Integer.parseInt(userInput) - 1;
-                        if (indexInput >= 0 && indexInput < directorList.size()) {
-                            currentDirector = directorList.get(indexInput);
-                        }
-                    } catch (NumberFormatException e) {
-                        for (Director d : directorList) {
-                            if (d.name.equalsIgnoreCase(userInput)) {
-                                currentDirector = d;
-                            }
-                        }
+        this.page = 0;
+        while (userInput != null) {
+
+            userInput = this.paginateDirectors(scanner, directorList, "delete", 5);
+
+            try {
+                int indexInput = Integer.parseInt(userInput) - 1;
+                if (indexInput >= 0 && indexInput < directorList.size()) {
+                    currentDirector = directorList.get(indexInput);
+                }
+            } catch (NumberFormatException e) {
+                for (Director d : directorList) {
+                    if (d.name.equalsIgnoreCase(userInput)) {
+                        currentDirector = d;
                     }
+                }
             }
 
             if (currentDirector != null) {
-                db.deleteDirector(dbconn, currentDirector);
+                this.db.deleteDirector(currentDirector);
                 currentDirector = null;
-                directorList = db.pullDirectors(dbconn);
+                directorList = this.db.pullDirectors();
             }
         }
     }

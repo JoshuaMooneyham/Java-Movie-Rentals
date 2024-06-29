@@ -5,25 +5,10 @@ import java.sql.*;
 import java.util.ArrayList;
 
 public class Repository {
-    public Connection connectToDatabase(String dbname, String user, String pass) {
-        Connection conn = null;
-        try{
-            Class.forName("org.postgresql.Driver");
-            conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/"+dbname, user, pass);
-            if (conn != null) {
-                System.out.println("Connection Established");
-            } else {
-                System.out.println("Connection Failed");
-            }
-        } catch (Exception e) {
-            System.out.println("Error Connecting to Database");
-        }
-        return conn;
-    }
 
-    public ArrayList<Movie> pullMovies(Connection conn) {
+    public ArrayList<Movie> pullMovies() {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT movies.id, name, title, year, runtime, genre, rented_by
                     FROM movies
@@ -39,9 +24,10 @@ public class Repository {
                     for (int i = 0; i < genre.length; i++) {
                         genre[i] = genre[i].replaceAll("[{}]", "");
                     }
-                } catch (NullPointerException e) {
+                } catch (Exception e) {
+                    System.out.println("Error parsing genres");
                 }
-                movieList.add(new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
             return movieList;
         } catch (Exception e) {
@@ -50,9 +36,9 @@ public class Repository {
         }
     }
 
-    public ArrayList<Movie> rentedMovies(Connection conn, Account user) {
+    public ArrayList<Movie> rentedMovies(Account user) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT movies.id, name, title, year, runtime, genre, rented_by
                     FROM movies
@@ -72,7 +58,7 @@ public class Repository {
                     }
                 } catch (NullPointerException e) {
                 }
-                movieList.add(new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
             return movieList;
         } catch (Exception e) {
@@ -81,9 +67,9 @@ public class Repository {
         }
     }
 
-    public ArrayList<Movie> availableMovies(Connection conn) {
+    public ArrayList<Movie> availableMovies() {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT movies.id, name, title, year, runtime, genre, rented_by
                     FROM movies
@@ -102,7 +88,7 @@ public class Repository {
                     }
                 } catch (NullPointerException e) {
                 }
-                movieList.add(new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
             return movieList;
         } catch (Exception e) {
@@ -111,41 +97,42 @@ public class Repository {
         }
     }
 
-    public void filterMovies(Connection conn, String filter) {
+    public void filterMovies(String filter) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = "SELECT * FROM movies ORDER BY " + filter + ";";
             statement = conn.prepareStatement(sql);
             ResultSet test = statement.executeQuery();
             while (test.next()) {
                 System.out.println(String.format("%s %s %s %s %s %s %s", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by")));
             }
+        } catch (RuntimeException e) {
+            System.out.println("error");
         } catch (Exception e) {
             System.out.println("Error filtering movies");
         }
     }
 
-    public void printAvailableMovies(Connection conn) {
+    public void printAvailableMovies() {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = "SELECT * FROM movies WHERE rented_by IS NULL;";
             statement = conn.prepareStatement(sql);
             ResultSet test = statement.executeQuery();
             while (test.next()) {
-                System.out.println(String.format("%s %s %s %s %s %s %s", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by") != 0 ? "Rented" : "Available"));
+                System.out.printf("%s %s %s %s %s %s %s\n", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by") != 0 ? "Rented" : "Available");
             }
         } catch (Exception e) {
             System.out.println("Error printing available movies");
         }
     }
 
-    public void createMovie(Connection conn, Director director, String title, Integer year, Integer runtime, String[] genre) {
+    public void createMovie(Director director, String title, Integer year, Integer runtime, String[] genre) {
         PreparedStatement statement;
-        try {
-
-            Movie duplicate = this.findDuplicate(conn, title);
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
+            Movie duplicate = this.findDuplicate(title);
             if (duplicate != null) {
-                this.updateMovie(conn, duplicate, duplicate.director, String.format("%s (%s)", duplicate.title, duplicate.year), duplicate.year, duplicate.runtime, duplicate.genre);
+                this.updateMovie(duplicate, duplicate.director, String.format("%s (%s)", duplicate.title, duplicate.year), duplicate.year, duplicate.runtime, duplicate.genre);
                 title = String.format("%s (%s)", title, year != null ? year : "Unknown Year");
             }
 
@@ -176,19 +163,18 @@ public class Repository {
                 statement.setNull(5, Types.ARRAY);
             }
 
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
 
-            System.out.println(String.format("Created Movie %s", title));
+            System.out.printf("Created Movie %s\n", title);
 
         } catch (Exception e) {
             System.out.println("Error creating movie");
         }
     }
 
-    public Movie getMovie(Connection conn, int id) {
+    public Movie getMovie(int id) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT movies.id, name, title, year, runtime, genre, rented_by
                     FROM movies
@@ -205,17 +191,18 @@ public class Repository {
                     genre[i] = genre[i].replaceAll("[{}]", "");
                 }
             } catch (NullPointerException e) {
+                System.out.println("Error parsing genre.");
             }
-            return new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
+            return new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
         } catch (Exception e) {
             System.out.println("Error getting movie");
             return null;
         }
     }
 
-    public Movie findDuplicate(Connection conn, String title) {
+    public Movie findDuplicate(String title) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT movies.id, name, title, year, runtime, genre, rented_by
                     FROM movies
@@ -232,8 +219,9 @@ public class Repository {
                     genre[i] = genre[i].replaceAll("[{}]", "");
                 }
             } catch (NullPointerException e) {
+                System.out.println("Error parsing genre.");
             }
-            return new Movie(test.getInt("id"), this.getDirector(conn, test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
+            return new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by"));
 
         } catch (Exception e) {
             System.out.println("Error finding Duplicate");
@@ -241,9 +229,9 @@ public class Repository {
         }
     }
 
-    public void updateMovie(Connection conn, Movie movie, Director director, String title, Integer year, Integer runtime, String[] genre) {
+    public void updateMovie(Movie movie, Director director, String title, Integer year, Integer runtime, String[] genre) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     UPDATE movies
                     SET director_id = ?,
@@ -253,7 +241,6 @@ public class Repository {
                         genre = ?
                     WHERE id = ?;""";
             statement = conn.prepareStatement(sql);
-//            System.out.printf("%s %s %s %s %s %s\n", movie.id, director.id, title, year, runtime, genre.toString());
             if (director != null) {
                 statement.setInt(1, director.id);
             } else {
@@ -286,31 +273,29 @@ public class Repository {
 
             statement.setInt(6, movie.id);
 
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
 
-            System.out.printf("Movie %s '%s' Updated", movie.id, title);
+            System.out.printf("Movie %s '%s' Updated\n", movie.id, title);
         } catch (Exception e) {
             System.out.println("Error updating movie");
         }
     }
 
-    public void deleteMovie(Connection conn, Movie movie) {
+    public void deleteMovie(Movie movie) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = "DELETE FROM movies WHERE id = ?;";
             statement = conn.prepareStatement(sql);
             statement.setInt(1, movie.id);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
         } catch (Exception e) {
             System.out.println("Error deleting movie");
         }
     }
 
-    public void rentMovie(Connection conn, Account account, Movie movie) {
+    public void rentMovie(Account account, Movie movie) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     UPDATE movies
                     SET rented_by = ?
@@ -318,16 +303,16 @@ public class Repository {
             statement = conn.prepareStatement(sql);
             statement.setInt(1, account.id);
             statement.setInt(2, movie.id);
-            ResultSet test = statement.executeQuery();
+            statement.executeUpdate();
             System.out.println("Rented " + movie.title);
         } catch (Exception e) {
             System.out.println("Error renting movie");
         }
     }
 
-    public void returnMovie(Connection conn, Movie movie) {
+    public void returnMovie(Movie movie) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     UPDATE movies
                     SET rented_by = ?
@@ -335,16 +320,16 @@ public class Repository {
             statement = conn.prepareStatement(sql);
             statement.setNull(1, Types.INTEGER);
             statement.setInt(2, movie.id);
-            ResultSet test = statement.executeQuery();
+            statement.executeUpdate();
             System.out.println("Returned " + movie.title);
         } catch (Exception e) {
             System.out.println("Error returning movie");
         }
     }
 
-    public Account createAccount(Connection conn, String username, String password, boolean isAdmin) {
+    public Account createAccount(String username, String password, boolean isAdmin) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     INSERT INTO users (username, password, admin)
                     VALUES (?, ?, ?)""";
@@ -352,19 +337,18 @@ public class Repository {
             statement.setString(1, username);
             statement.setString(2, password);
             statement.setBoolean(3, isAdmin);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
             System.out.println("Account Created");
-            return this.getAccount(conn, username, password);
+            return this.getAccount(username, password);
         } catch (Exception e) {
             System.out.println("Error creating account");
             return null;
         }
     }
 
-    public Account getAccount(Connection conn, String username, String password) {
+    public Account getAccount(String username, String password) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT * FROM users WHERE username = ? AND password = ?;""";
             statement = conn.prepareStatement(sql);
@@ -382,9 +366,9 @@ public class Repository {
         }
     }
 
-    public ArrayList<Account> pullCustomers(Connection conn) {
+    public ArrayList<Account> pullCustomers() {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT username, id, admin
                     FROM users
@@ -403,9 +387,9 @@ public class Repository {
         }
     }
 
-    public ArrayList<Account> pullAdmin(Connection conn) {
+    public ArrayList<Account> pullAdmin() {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT username, id, admin
                     FROM users
@@ -424,9 +408,9 @@ public class Repository {
         }
     }
 
-    public void promoteCustomer(Connection conn, Account user) {
+    public void promoteCustomer(Account user) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     UPDATE users
                     SET admin = ?
@@ -434,16 +418,15 @@ public class Repository {
             statement = conn.prepareStatement(sql);
             statement.setBoolean(1, true);
             statement.setInt(2, user.id);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
         } catch (Exception e) {
             System.out.println("Error promoting customers");
         }
     }
 
-    public void demoteAdmin(Connection conn, Account user) {
+    public void demoteAdmin(Account user) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     UPDATE users
                     SET admin = ?
@@ -451,16 +434,15 @@ public class Repository {
             statement = conn.prepareStatement(sql);
             statement.setBoolean(1, false);
             statement.setInt(2, user.id);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
         } catch (Exception e) {
             System.out.println("Error demoting user");
         }
     }
 
-    public ArrayList<Account> pullUsers(Connection conn) {
+    public ArrayList<Account> pullUsers() {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     SELECT username, id, admin
                     FROM users
@@ -478,23 +460,22 @@ public class Repository {
         }
     }
 
-    public void deleteUser(Connection conn, Account account) {
+    public void deleteUser(Account account) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = "DELETE FROM users WHERE id = ?;";
             statement = conn.prepareStatement(sql);
             statement.setInt(1, account.id);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
         } catch (Exception e) {
             System.out.println("Error deleting movie");
         }
     }
 
-    public ArrayList<Director> pullDirectors(Connection conn) {
+    public ArrayList<Director> pullDirectors() {
         PreparedStatement statement;
-        try {
-            String sql = "SELECT * FROM director;";
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
+            String sql = "SELECT * FROM director ORDER BY name;";
             statement = conn.prepareStatement(sql);
             ResultSet test = statement.executeQuery();
             ArrayList<Director> directorList = new ArrayList<>();
@@ -508,28 +489,27 @@ public class Repository {
         }
     }
 
-    public Director createDirector(Connection conn, String name) {
+    public Director createDirector(String name) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = """
                     INSERT INTO director (name)
                         VALUES (?);
                     """;
             statement = conn.prepareStatement(sql);
             statement.setString(1, name);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
             System.out.println("Created New Director Entry: " + name);
-            return this.getDirector(conn, name);
+            return this.getDirector(name);
         } catch (Exception e) {
             System.out.println("Error creating director");
             return null;
         }
     }
 
-    public Director getDirector(Connection conn, String name) {
+    public Director getDirector(String name) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = "SELECT * FROM director WHERE name=?;";
             statement = conn.prepareStatement(sql);
             statement.setString(1, name);
@@ -542,28 +522,26 @@ public class Repository {
         }
     }
 
-    public void updateDirector(Connection conn, Director director) {
+    public void updateDirector(Director director) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = "UPDATE director SET name = ? WHERE id = ?;";
             statement = conn.prepareStatement(sql);
             statement.setString(1, director.name);
             statement.setInt(2, director.id);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
         } catch (Exception e) {
             System.out.println("Error getting director");
         }
     }
 
-    public void deleteDirector(Connection conn, Director director) {
+    public void deleteDirector(Director director) {
         PreparedStatement statement;
-        try {
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
             String sql = "DELETE FROM director WHERE id = ?;";
             statement = conn.prepareStatement(sql);
             statement.setInt(1, director.id);
-            statement.execute();
-            statement.close();
+            statement.executeUpdate();
         } catch (Exception e) {
             System.out.println("Error getting director");
         }

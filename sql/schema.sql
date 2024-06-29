@@ -7,10 +7,11 @@ CREATE TABLE director (
 
 CREATE TABLE users (
     id INT GENERATED ALWAYS AS IDENTITY,
-    username VARCHAR(255),
-    password VARCHAR(255),
+    username VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,
     admin BOOLEAN,
-    PRIMARY KEY(id)
+    PRIMARY KEY (id),
+    UNIQUE (username)
 );
 
 
