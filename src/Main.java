@@ -337,6 +337,38 @@ public class Main {
         return null;
     }
 
+    public static void formatTables(ArrayList<Movie> movieList, int[] spaces) {
+        for (Movie m : movieList) {
+            m.title = m.title.length() > 25 ? m.title.substring(0, 22) + "..." : m.title;
+            m.director.name = m.director.name.length() > 25 ? m.director.name.substring(0, 22) + "..." : m.director.name;
+            spaces[0] = Math.max(spaces[0], m.title.length());
+            spaces[1] = Math.max(spaces[1], m.director.name.length());
+            spaces[2] = Math.max(spaces[2], String.format("%s", m.year).length());
+            spaces[3] = Math.max(spaces[3], String.format("%s", m.runtime).length());
+        }
+        if (!movieList.isEmpty()) {
+            String header = "\nAvailability |";
+            header += String.format(" Title%s |", spaces[0] > 5 ? " ".repeat(spaces[0] - 5) : "");
+            header += String.format(" Director%s |", spaces[1] > 8 ? " ".repeat(spaces[1] - 8) : "");
+            header += String.format(" Year%s |", " ".repeat(spaces[2] - 4));
+            header += String.format(" Runtime%s | Genre\n", spaces[3] > 7 ? " ".repeat(spaces[3] - 7) : "");
+            System.out.println(header);
+            for (Movie m : movieList) {
+                int yearSpots = m.year > 0 ? String.format("%s", m.year).length() : 7;
+                int runtimeSpots = m.runtime > 0 ? String.format("%s", m.runtime).length() : 7;
+                StringBuilder row = new StringBuilder(String.format("%s |", m.rented_by > 0 ? "Unavailable " : "Available   "));
+                row.append(String.format(" %s%s |", m.title, spaces[0] > m.title.length() ? " ".repeat(spaces[0] - m.title.length()) : ""));
+                row.append(String.format(" %s%s |", m.director.name, spaces[1] > m.director.name.length() ? " ".repeat(spaces[1] - m.director.name.length()) : ""));
+                row.append(String.format(" %s%s |", m.year > 0 ? m.year : "Unknown", spaces[2] > yearSpots ? " ".repeat(spaces[2] - yearSpots) : ""));
+                row.append(String.format(" %s%s |", m.runtime > 0 ? m.runtime : "Unknown", spaces[3] > runtimeSpots ? " ".repeat(spaces[3] - runtimeSpots) : ""));
+                for (String g : m.genre) {
+                    row.append(String.format(" %s", g));
+                }
+                System.out.println(row);
+            }
+        }
+    }
+
     public void addMovie(Scanner scanner) {
         String title = "";
         System.out.print("Title (or [Back] to cancel): ");
@@ -403,25 +435,23 @@ public class Main {
         while (true) {
             boolean skip = false;
             System.out.println("What would you like to search by?");
-            System.out.println("[Genre], [Year], [Runtime], [Title], [Available], [All] (or [Back] to exit)");
+            System.out.println("[Genre], [Year], [Runtime], [Title], [Available] (or [Back] to exit)");
             System.out.print("> ");
             userInput = scanner.nextLine().toLowerCase().strip();
-            String [] choices = {"genre", "year", "runtime", "title"};
-            for (String value : choices) {
-                if (userInput.equals(value)) {
-                    this.db.filterMovies(value);
-                    skip = true;
-                }
-            }
             if (!skip) {
                 switch (userInput) {
-                    case "back":
+                    case "back", "b":
                         return;
-                    case "all":
-                        this.db.filterMovies("id");
+                    case "year", "runtime", "title":
+                        this.db.filterMovies(userInput);
                         break;
                     case "available":
                         this.db.printAvailableMovies();
+                        break;
+                    case "genre":
+                        System.out.print("Enter Genre: ");
+                        String genre = this.toTitleCase(scanner.nextLine());
+                        this.db.filterGenres(genre);
                         break;
                     default:
                         System.out.println("Please enter a valid action!");
@@ -464,10 +494,10 @@ public class Main {
                 String genre = scanner.nextLine().strip();
 
                 if (title.length() < 2) {
-                    title = currentMovie.title;
                     if (!title.isEmpty()) {
                         System.out.println("An error has occurred while parsing 'title'; reverting to current.");
                     }
+                    title = currentMovie.title;
                 }
 
                 Director foundDirector = currentMovie.director;
@@ -707,8 +737,10 @@ public class Main {
 
     public void viewDirectors(Scanner scanner) {
         ArrayList<Director> directorList = this.db.pullDirectors();
+        ArrayList<Movie> movieList = this.db.pullMovies();
         for (Director d : directorList) {
             System.out.printf("%s\n", d.name);
+            this.db.printDirectorMovies(d);
         }
     }
 // Paginated

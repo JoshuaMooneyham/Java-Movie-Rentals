@@ -25,7 +25,7 @@ public class Repository {
                         genre[i] = genre[i].replaceAll("[{}]", "");
                     }
                 } catch (Exception e) {
-                    System.out.println("Error parsing genres");
+//                    System.out.println("Error parsing genres");
                 }
                 movieList.add(new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
@@ -100,12 +100,58 @@ public class Repository {
     public void filterMovies(String filter) {
         PreparedStatement statement;
         try (Connection conn = DatabaseConnection.connectToDatabase()) {
-            String sql = "SELECT * FROM movies ORDER BY " + filter + ";";
+            String sql = String.format("""
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    ORDER BY %s;""", filter);
             statement = conn.prepareStatement(sql);
             ResultSet test = statement.executeQuery();
+            ArrayList<Movie> movieList = new ArrayList<>();
             while (test.next()) {
-                System.out.println(String.format("%s %s %s %s %s %s %s", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by")));
+                String [] genre = {};
+                try {
+                    genre = test.getArray("genre").toString().split(",");
+                    for (int i = 0; i < genre.length; i++) {
+                        genre[i] = genre[i].replaceAll("[{}]", "");
+                    }
+                } catch (NullPointerException e) {
+                }
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
+            Main.formatTables(movieList, new int[] {5,8,7,7});
+        } catch (RuntimeException e) {
+            System.out.println("error");
+        } catch (Exception e) {
+            System.out.println("Error filtering movies");
+        }
+    }
+
+    public void filterGenres(String genreInput) {
+        PreparedStatement statement;
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
+            String sql = """
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    WHERE ? = ANY ( genre )
+                    ORDER BY title;""";
+            statement = conn.prepareStatement(sql);
+            statement.setString(1, genreInput);
+            ResultSet test = statement.executeQuery();
+            ArrayList<Movie> movieList = new ArrayList<>();
+            while (test.next()) {
+                String [] genre = {};
+                try {
+                    genre = test.getArray("genre").toString().split(",");
+                    for (int i = 0; i < genre.length; i++) {
+                        genre[i] = genre[i].replaceAll("[{}]", "");
+                    }
+                } catch (NullPointerException e) {
+                }
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
+            }
+            Main.formatTables(movieList, new int[] {5,8,7,7});
         } catch (RuntimeException e) {
             System.out.println("error");
         } catch (Exception e) {
@@ -116,14 +162,31 @@ public class Repository {
     public void printAvailableMovies() {
         PreparedStatement statement;
         try (Connection conn = DatabaseConnection.connectToDatabase()) {
-            String sql = "SELECT * FROM movies WHERE rented_by IS NULL;";
+            String sql = """
+                    SELECT movies.id, name, title, year, runtime, genre, rented_by
+                    FROM movies
+                    INNER JOIN director ON movies.director_id = director.id
+                    WHERE rented_by IS NULL
+                    ORDER BY title;""";
             statement = conn.prepareStatement(sql);
             ResultSet test = statement.executeQuery();
+            ArrayList<Movie> movieList = new ArrayList<>();
             while (test.next()) {
-                System.out.printf("%s %s %s %s %s %s %s\n", test.getInt("id"), test.getInt("director_id"), test.getString("title"), test.getInt("year"), test.getInt("runtime"), test.getArray("genre"), test.getInt("rented_by") != 0 ? "Rented" : "Available");
+                String [] genre = {};
+                try {
+                    genre = test.getArray("genre").toString().split(",");
+                    for (int i = 0; i < genre.length; i++) {
+                        genre[i] = genre[i].replaceAll("[{}]", "");
+                    }
+                } catch (NullPointerException e) {
+                }
+                movieList.add(new Movie(test.getInt("id"), this.getDirector(test.getString("name")), test.getString("title"), test.getInt("year"), test.getInt("runtime"), genre, test.getInt("rented_by")));
             }
+            Main.formatTables(movieList, new int[] {5,8,7,7});
+        } catch (RuntimeException e) {
+            System.out.println("error");
         } catch (Exception e) {
-            System.out.println("Error printing available movies");
+            System.out.println("Error filtering movies");
         }
     }
 
@@ -486,6 +549,29 @@ public class Repository {
         } catch (Exception e) {
             System.out.println("Error pulling all directors");
             return null;
+        }
+    }
+
+    public void printDirectorMovies(Director director) {
+        PreparedStatement statement;
+        try (Connection conn = DatabaseConnection.connectToDatabase()) {
+            String sql = """
+            SELECT title
+            FROM movies
+            WHERE director_id = ?
+            ORDER BY year DESC
+            FETCH FIRST 3 ROWS ONLY;""";
+            statement = conn.prepareStatement(sql);
+            statement.setInt(1, director.id);
+            ResultSet test = statement.executeQuery();
+            if (!test.next()) {
+                System.out.println("    - No Current Movies.");
+            }
+            while (test.next()) {
+                System.out.printf("    - %s\n", test.getString("title"));
+            }
+        } catch (Exception e) {
+            System.out.println("Error pulling all directors");
         }
     }
 
